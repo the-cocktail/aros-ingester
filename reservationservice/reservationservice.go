@@ -2,35 +2,36 @@ package reservationservice
 
 import (
 	"github.com/emicklei/go-restful"
-	"log"
-	"net/http"
 	"github.com/fitstar/labix_mgo"
 	"github.com/fitstar/labix_mgo/bson"
+	"github.com/robfig/config"
+	"log"
+	"net/http"
 	"time"
 )
 
 type Reservation struct {
-	Id string
-	UserId string
-	Total string
+	Id        string
+	UserId    string
+	Total     string
 	CreatedAt time.Time
 	UpdatedAt time.Time
-	Status string
+	Status    string
 	UserAgent string
-	UserIP string
+	UserIP    string
 }
 
 func log_reservation(str string, r Reservation) {
-	
+
 	log.Println(str + " : " +
-	  "Id," + r.Id +
-      ",UserId," + r.UserId +
-  	  ",Total," + r.Total + 
-	  ",CreatedAt," + r.CreatedAt.Format(time.RFC822) +
-	  ",UpdatedAt," + r.UpdatedAt.Format(time.RFC822) +
-	  ",Status," + r.Status +
-	  ",UserAgent," + r.UserAgent +
-	  ",UserIP" + r.UserIP)
+		"Id," + r.Id +
+		",UserId," + r.UserId +
+		",Total," + r.Total +
+		",CreatedAt," + r.CreatedAt.Format(time.RFC822) +
+		",UpdatedAt," + r.UpdatedAt.Format(time.RFC822) +
+		",Status," + r.Status +
+		",UserAgent," + r.UserAgent +
+		",UserIP" + r.UserIP)
 }
 
 func New() *restful.WebService {
@@ -51,21 +52,38 @@ func New() *restful.WebService {
 	return service
 }
 
+func mongodb_config() (string, string, string) {
+
+	c, _ := config.ReadDefault("application.ini")
+
+	ssid, _ := c.String("mongodb", "ssid")
+	database, _ := c.String("mongodb", "database")
+	collection, _ := c.String("mongodb", "collection")
+
+	return ssid, database, collection
+}
+
 // curl -X GET http://localhost:8080/reservations/A333DEF -H "Content-type: application/xml"
 func FindReservation(request *restful.Request, response *restful.Response) {
 
 	id := request.PathParameter("reservation-id")
-	
-	session, err := mgo.Dial("localhost")
-	if err != nil {	panic(err) }
+
+	mongodb_ssid, mongodb_database, mongodb_collection := mongodb_config()
+
+	session, err := mgo.Dial(mongodb_ssid)
+	if err != nil {
+		panic(err)
+	}
 	defer session.Close()
-	
-	c := session.DB("AROS").C("reservations")
+
+	c := session.DB(mongodb_database).C(mongodb_collection)
 	reserve := Reservation{}
-	
+
 	err = c.Find(bson.M{"id": id}).One(&reserve)
-	if err != nil {	panic(err) }
-	
+	if err != nil {
+		panic(err)
+	}
+
 	response.WriteEntity(reserve)
 	log_reservation("FindReservation", reserve)
 }
@@ -75,26 +93,28 @@ func FindReservation(request *restful.Request, response *restful.Response) {
 func CreateReservation(request *restful.Request, response *restful.Response) {
 	reserve := Reservation{Id: request.PathParameter("reservation-id")}
 	err := request.ReadEntity(&reserve)
-	
+
 	reserve.CreatedAt = time.Now()
 	reserve.UpdatedAt = time.Now()
 	reserve.Status = "E_INIT"
-	
+
+	mongodb_ssid, mongodb_database, mongodb_collection := mongodb_config()
+
 	if err == nil {
-		session, err := mgo.Dial("localhost")
+		session, err := mgo.Dial(mongodb_ssid)
 		if err != nil {
 			panic(err)
 		}
 		defer session.Close()
-		
-		c:= session.DB("AROS").C("reservations")
+
+		c := session.DB(mongodb_database).C(mongodb_collection)
 		err = c.Insert(reserve)
-		
+
 		if err != nil {
 			panic(err)
 		}
 		log_reservation("CreateReservation", reserve)
-		
+
 	} else {
 		response.WriteError(http.StatusInternalServerError, err)
 		log.Println(err)
@@ -106,49 +126,69 @@ func UpdateReservation(request *restful.Request, response *restful.Response) {
 
 	reserve := Reservation{}
 	err := request.ReadEntity(&reserve)
-	if err != nil { panic(err) }
-	
-	session, err := mgo.Dial("localhost")
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
+
+	mongodb_ssid, mongodb_database, mongodb_collection := mongodb_config()
+
+	session, err := mgo.Dial(mongodb_ssid)
+	if err != nil {
+		panic(err)
+	}
 
 	defer session.Close()
-	
+
 	id := reserve.Id
-	
-	c:= session.DB("AROS").C("reservations")
+
+	c := session.DB(mongodb_database).C(mongodb_collection)
 	log.Println("=> Finding ID = " + id)
-	
+
 	err = c.Find(bson.M{"id": id}).One(&reserve)
-	if err != nil { panic(err) }
-	
+	if err != nil {
+		panic(err)
+	}
+
 	err = request.ReadEntity(&reserve)
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 
 	reserve.UpdatedAt = time.Now()
-	
+
 	err = c.Update(bson.M{"id": id}, reserve)
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 
 	response.WriteEntity(reserve)
 	log_reservation("UpdateReservation", reserve)
 }
 
 func RemoveReservation(request *restful.Request, response *restful.Response) {
-	
+
 	id := request.PathParameter("reservation-id")
 	reserve := Reservation{}
-		
-	session, err := mgo.Dial("localhost")
-	if err != nil {	panic(err) }
+
+	mongodb_ssid, mongodb_database, mongodb_collection := mongodb_config()
+
+	session, err := mgo.Dial(mongodb_ssid)
+	if err != nil {
+		panic(err)
+	}
 	defer session.Close()
-	
-	c:= session.DB("AROS").C("reservations")
-	
+
+	c := session.DB(mongodb_database).C(mongodb_collection)
+
 	err = c.Find(bson.M{"id": id}).One(&reserve)
-	if err != nil {	panic(err) }
-	
-	err = c.Remove(bson.M{"id":id})
-	if err != nil {	panic(err) }
+	if err != nil {
+		panic(err)
+	}
+
+	err = c.Remove(bson.M{"id": id})
+	if err != nil {
+		panic(err)
+	}
 
 	response.WriteEntity(reserve)
 	log_reservation("RemoveReservation", reserve)
